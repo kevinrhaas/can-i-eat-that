@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Can I Eat That?</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-label="Can I Eat That scanner">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">AI food safety lens</p>
+            <h1>Can I Eat That?</h1>
+          </div>
+          <div class="provider-pill" id="providerPill">Demo Lens</div>
+        </div>
+
+        <section class="scanner-panel">
+          <div class="preview-wrap">
+            <video id="cameraStream" class="camera-stream" playsinline muted></video>
+            <img id="imagePreview" class="image-preview" alt="Selected item preview" />
+            <div class="empty-preview" id="emptyPreview">
+              <span class="scan-mark"></span>
+              <strong>Point, snap, decide.</strong>
+              <small>Food, plants, leftovers, mystery containers.</small>
+            </div>
+            <div class="scan-lines" aria-hidden="true"></div>
+          </div>
+
+          <div class="actions">
+            <button class="icon-button" id="startCamera" type="button" aria-label="Open camera" title="Open camera">
+              <span aria-hidden="true">CAM</span>
+            </button>
+            <button class="primary-button" id="capturePhoto" type="button" disabled>Capture</button>
+            <label class="secondary-button" for="imageInput">Upload
+              <input id="imageInput" type="file" accept="image/*" capture="environment" />
+            </label>
+            <button class="primary-button analyze-button" id="analyzeButton" type="button" disabled>Analyze</button>
+          </div>
+        </section>
+
+        <section class="result-panel" aria-live="polite">
+          <div class="status-card" id="statusCard">
+            <p class="status-label">Verdict</p>
+            <div class="verdict-row">
+              <span class="verdict-dot pending" id="verdictDot"></span>
+              <h2 id="verdictTitle">Waiting for an image</h2>
+            </div>
+            <p class="result-copy" id="summaryText">Take or upload a picture to get an edible, caution, or avoid recommendation.</p>
+          </div>
+
+          <div class="detail-grid">
+            <article class="detail-card">
+              <h3>Identification</h3>
+              <p id="identityText">No item scanned yet.</p>
+            </article>
+            <article class="detail-card">
+              <h3>Confidence</h3>
+              <p id="confidenceText">--</p>
+            </article>
+            <article class="detail-card wide">
+              <h3>Watchouts</h3>
+              <ul id="watchoutsList">
+                <li>AI cannot verify allergens, spoilage, contamination, dosage, or poisonous lookalikes from an image alone.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <aside class="control-rail" aria-label="AI settings">
+        <div class="rail-section">
+          <h2>Engine</h2>
+          <div class="segmented" role="group" aria-label="Provider">
+            <button class="segment active" type="button" data-provider="demo">Demo</button>
+            <button class="segment" type="button" data-provider="gemini">Gemini</button>
+            <button class="segment" type="button" data-provider="claude">Claude</button>
+          </div>
+        </div>
+
+        <div class="rail-section key-section" id="keySection">
+          <label for="apiKey">API key</label>
+          <input id="apiKey" type="password" autocomplete="off" placeholder="Paste key for selected engine" />
+          <label class="check-row">
+            <input id="rememberKey" type="checkbox" />
+            <span>Remember in this browser</span>
+          </label>
+        </div>
+
+        <div class="rail-section">
+          <label for="modelInput">Model</label>
+          <input id="modelInput" type="text" />
+        </div>
+
+        <div class="rail-section">
+          <label for="contextInput">Context</label>
+          <textarea id="contextInput" rows="4" placeholder="Optional: location, cooked/raw, allergies, packaging date"></textarea>
+        </div>
+
+        <div class="rail-section mini">
+          <h2>Deploy notes</h2>
+          <p>Static demo: GitHub Pages, Netlify, Vercel, or any HTTPS host.</p>
+          <p>Production: move API keys into a serverless proxy before public use.</p>
+        </div>
+      </aside>
+    </main>
+
+    <canvas id="captureCanvas" hidden></canvas>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "can-i-eat-that",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Camera-first edible item classifier demo using Gemini or Claude vision APIs.",
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "start": "python3 -m http.server 5173"
+  }
+}
