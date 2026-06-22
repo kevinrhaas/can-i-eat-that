@@ -11,19 +11,22 @@
       <header class="topbar">
         <a class="brand-lockup" href="./" aria-label="Can I Eat That home">
           <span class="logo-mark" aria-hidden="true">
-            <span class="logo-bite"></span>
-            <span class="logo-question">?</span>
+            <span class="logo-no">NO</span>
+            <span class="logo-slash"></span>
           </span>
           <span>
             <span class="brand-name">Can I Eat That?</span>
-            <span class="brand-tag">Suspicious snack intelligence</span>
+            <span class="brand-tag">A bouncer for questionable objects</span>
           </span>
         </a>
 
         <div class="topbar-actions">
-          <div class="provider-pill" id="providerPill">Free Cloudflare</div>
           <button class="settings-button" id="openSettings" type="button" aria-label="Open settings" title="Settings">
-            <span aria-hidden="true">SET</span>
+            <span class="settings-icon" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
           </button>
         </div>
       </header>
@@ -54,10 +57,17 @@
           </div>
 
           <div class="actions">
-            <label class="secondary-button upload-button" for="imageInput">Upload images
+            <label class="secondary-button upload-button" for="imageInput">
+              <span class="button-icon" aria-hidden="true">+</span>
+              <span>
+                <span class="button-title">Upload image</span>
+                <span class="button-subtitle">Gallery or files</span>
+              </span>
               <input id="imageInput" type="file" accept="image/*" />
             </label>
-            <button class="primary-button analyze-button" id="analyzeButton" type="button" disabled>Analyze</button>
+            <button class="primary-button analyze-button" id="analyzeButton" type="button" disabled>
+              <span>Analyze</span>
+            </button>
           </div>
         </section>
 

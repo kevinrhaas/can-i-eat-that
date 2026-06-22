@@ -23,7 +23,6 @@ const freeDailyNeurons = 10_000;
 const defaultNeuronsPerCheck = 20;
 
 const els = {
-  providerPill: document.querySelector("#providerPill"),
   cameraStream: document.querySelector("#cameraStream"),
   imagePreview: document.querySelector("#imagePreview"),
   emptyPreview: document.querySelector("#emptyPreview"),
@@ -117,7 +116,6 @@ function closeSettings() {
 
 function setProvider(provider) {
   state.provider = provider;
-  els.providerPill.textContent = labels[provider];
   els.modelInput.value = defaults[provider];
   els.keySection.style.display = provider === "gemini" || provider === "claude" ? "grid" : "none";
   els.endpointSection.style.display = provider === "cloudflare" ? "grid" : "none";
