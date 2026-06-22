@@ -14,7 +14,7 @@ const SYSTEM_PROMPT = `You are a cautious visual food safety assistant for a dem
   "summary": "one clear sentence",
   "watchouts": ["short practical risk", "short practical risk"]
 }
-Rules: If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use caution or avoid. Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.`;
+Rules: If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use caution or avoid. Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant. Return exactly one JSON object and no markdown, preface, analysis, or prose outside the JSON.`;
 
 export default {
   async fetch(request, env) {
@@ -51,7 +51,7 @@ export default {
       });
 
       const text = modelResponse.response || "";
-      const result = parseJsonText(text);
+      const result = parseModelResult(text);
       return json({ result, raw: text }, 200, request);
     } catch (error) {
       return json({ error: readableError(error) }, 400, request);
@@ -88,15 +88,116 @@ function base64ToByteArray(base64) {
   return bytes;
 }
 
+function parseModelResult(text) {
+  try {
+    return normalizeResult(parseJsonText(text));
+  } catch {
+    const labeled = parseLabeledText(text);
+    if (labeled) return normalizeResult(labeled);
+
+    return {
+      verdict: "caution",
+      item: "Unclear visual result",
+      confidence: "low",
+      summary: "The image was analyzed, but the model response could not be converted into a structured verdict.",
+      watchouts: [
+        "Try a clearer, closer photo with only the item in frame.",
+        "Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes.",
+      ],
+    };
+  }
+}
+
+function parseLabeledText(text) {
+  const verdict = labeledValue(text, "verdict");
+  const item = labeledValue(text, "item");
+  const confidence = labeledValue(text, "confidence");
+  const summary = labeledValue(text, "summary");
+  const watchouts = labeledValue(text, "watchouts");
+
+  if (!verdict && !item && !summary) return null;
+
+  return {
+    verdict: verdict || "caution",
+    item: item || "Unidentified item",
+    confidence: confidence || "low",
+    summary: summary || "The model returned a limited result.",
+    watchouts: watchouts
+      ? watchouts.split(/[,;|]/).map((value) => value.trim()).filter(Boolean)
+      : [],
+  };
+}
+
+function labeledValue(text, label) {
+  const pattern = new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${label}(?:\\*\\*)?\\s*:\\s*([^\\n]+)`, "i");
+  return text.match(pattern)?.[1]?.replace(/\*\*/g, "").trim() || "";
+}
+
 function parseJsonText(text) {
   const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
   try {
     return JSON.parse(cleaned);
   } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    const objectText = firstJsonObject(cleaned);
+    if (objectText) return JSON.parse(objectText);
     throw new Error("The model did not return valid JSON.");
   }
+}
+
+function firstJsonObject(text) {
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        return text.slice(start, index + 1);
+      }
+    }
+  }
+
+  return "";
+}
+
+function normalizeResult(result) {
+  const verdict = String(result?.verdict || "caution").toLowerCase();
+  const confidence = String(result?.confidence || "low").toLowerCase();
+  return {
+    verdict: ["safe", "caution", "avoid"].includes(verdict) ? verdict : "caution",
+    item: String(result?.item || "Unidentified item").slice(0, 120),
+    confidence: ["low", "medium", "high"].includes(confidence) ? confidence : "low",
+    summary: String(result?.summary || "The model returned a limited result.").slice(0, 320),
+    watchouts: Array.isArray(result?.watchouts) && result.watchouts.length
+      ? result.watchouts.map((item) => String(item).slice(0, 180)).slice(0, 5)
+      : ["Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes."],
+  };
 }
 
 function json(body, status, request) {

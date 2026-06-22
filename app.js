@@ -199,7 +199,7 @@ async function setImage(dataUrl, mimeType) {
 
 async function prepareImage(dataUrl, mimeType) {
   const image = await loadImage(dataUrl);
-  const maxSide = 1024;
+  const maxSide = 768;
   const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
   const width = Math.max(1, Math.round(image.naturalWidth * scale));
   const height = Math.max(1, Math.round(image.naturalHeight * scale));
@@ -212,7 +212,7 @@ async function prepareImage(dataUrl, mimeType) {
 
   const outputType = mimeType === "image/png" && scale === 1 ? "image/png" : "image/jpeg";
   return {
-    dataUrl: canvas.toDataURL(outputType, 0.82),
+    dataUrl: canvas.toDataURL(outputType, 0.76),
     mimeType: outputType,
   };
 }
