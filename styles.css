@@ -498,7 +498,7 @@ button:disabled {
 
 .result-panel {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto auto;
   gap: 12px;
   min-height: calc(100vh - 114px);
   padding: 12px;
@@ -514,8 +514,8 @@ button:disabled {
 
 .status-card {
   display: grid;
-  align-content: end;
-  min-height: 300px;
+  align-content: start;
+  min-height: 230px;
 }
 
 .status-label,
@@ -817,11 +817,20 @@ button:focus-visible,
   .scanner-panel {
     grid-template-rows: minmax(430px, 58vh) auto;
   }
+
+  .result-panel {
+    min-height: auto;
+  }
+
+  .status-card {
+    min-height: 0;
+  }
 }
 
 @media (max-width: 680px) {
   .app-shell {
     padding: 10px;
+    gap: 10px;
   }
 
   .topbar {
@@ -834,7 +843,31 @@ button:focus-visible,
   }
 
   .scanner-panel {
-    grid-template-rows: minmax(410px, 60vh) auto;
+    grid-template-rows: minmax(360px, 52vh) auto;
+  }
+
+  .result-panel {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .status-card,
+  .detail-card,
+  .quota-card {
+    padding: 14px;
+  }
+
+  .verdict-row {
+    gap: 8px;
+  }
+
+  .verdict-row h1 {
+    font-size: clamp(2.35rem, 16vw, 4.6rem);
+  }
+
+  .result-copy {
+    margin-top: 12px;
+    font-size: 1rem;
   }
 
   .preview-hud {

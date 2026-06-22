@@ -9,6 +9,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:5173",
 ]);
 const NON_FOOD_PATTERN = /\b(soap|soap dispenser|dispenser|sanitizer|shampoo|lotion|detergent|cleaner|cleaning|cosmetic|medicine|medication|pill|capsule|battery|plastic object|toy|tool|appliance|unknown liquid)\b/;
+const ADULT_BEVERAGE_PATTERN = /\b(whiskey|whisky|wine|beer|vodka|rum|tequila|gin|liqueur|cocktail|alcoholic beverage)\b/;
 
 const SYSTEM_PROMPT = `You are a strict visual edibility classifier for a demo app named "Can I Eat That?" The question is literal: can a human eat the depicted item as food?
 Return only valid JSON with these keys:
@@ -17,13 +18,15 @@ Return only valid JSON with these keys:
   "item": "short identification",
   "confidence": "low" | "medium" | "high",
   "summary": "one clear sentence",
-  "watchouts": ["short practical risk", "short practical risk"]
+  "rationale": "2-3 sentence explanation of why this verdict was chosen",
+  "concerns": ["specific concern", "specific concern", "specific concern"]
 }
 Rules:
 - "Safe to touch", "safe for household use", "non-toxic surface", or "commonly used around food" does not mean edible.
 - If the item is soap, sanitizer, shampoo, lotion, medicine, pills, supplements, cleaning supplies, cosmetics, batteries, plastic, metal, glass, packaging, utensils, containers, appliances, toys, tools, unknown liquids, or any household object not intended as food, the verdict must be "avoid".
 - If the item is a dispenser, bottle, jar, wrapper, box, plate, cup, or container, judge the visible object itself unless edible contents are clearly visible.
 - A soap dispenser is not edible. Its verdict must be "avoid" with a watchout about soap/cleaning chemicals.
+- Alcoholic beverages intended for adults are not ordinary food. Use "caution", not "safe", and mention legal age, intoxication, medication interactions, pregnancy, driving, and overdose risks. Use "avoid" for children, pets, unknown alcohol, rubbing alcohol, fuel alcohol, or cleaning alcohol.
 - If edible food is clearly visible but freshness, allergen, cooking, storage, or contamination cannot be verified, use "caution".
 - If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use "avoid" or "caution".
 - Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.
@@ -115,7 +118,8 @@ function parseModelResult(text) {
       item: "Unclear visual result",
       confidence: "low",
       summary: "The image was analyzed, but the model response could not be converted into a structured verdict.",
-      watchouts: [
+      rationale: "The model response was not structured enough to support a confident edibility call.",
+      concerns: [
         "Try a clearer, closer photo with only the item in frame.",
         "Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes.",
       ],
@@ -128,7 +132,9 @@ function parseLabeledText(text) {
   const item = labeledValue(text, "item");
   const confidence = labeledValue(text, "confidence");
   const summary = labeledValue(text, "summary");
+  const rationale = labeledValue(text, "rationale");
   const watchouts = labeledValue(text, "watchouts");
+  const concerns = labeledValue(text, "concerns");
 
   if (!verdict && !item && !summary) return null;
 
@@ -137,8 +143,9 @@ function parseLabeledText(text) {
     item: item || "Unidentified item",
     confidence: confidence || "low",
     summary: summary || "The model returned a limited result.",
-    watchouts: watchouts
-      ? watchouts.split(/[,;|]/).map((value) => value.trim()).filter(Boolean)
+    rationale: rationale || "The model returned a limited explanation.",
+    concerns: (concerns || watchouts)
+      ? (concerns || watchouts).split(/[,;|]/).map((value) => value.trim()).filter(Boolean)
       : [],
   };
 }
@@ -210,15 +217,24 @@ function normalizeResult(result) {
     item: String(source?.item || "Unidentified item").slice(0, 120),
     confidence: ["low", "medium", "high"].includes(confidence) ? confidence : "low",
     summary: String(source?.summary || "The model returned a limited result.").slice(0, 320),
-    watchouts: Array.isArray(source?.watchouts) && source.watchouts.length
-      ? source.watchouts.map((item) => String(item).slice(0, 180)).slice(0, 5)
-      : ["Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes."],
+    rationale: String(source?.rationale || "The model did not provide detailed reasoning.").slice(0, 520),
+    concerns: concernsFrom(source),
   };
   return applyNonFoodOverride(normalized);
 }
 
+function concernsFrom(source) {
+  const concerns = Array.isArray(source?.concerns) && source.concerns.length ? source.concerns : source?.watchouts;
+  return Array.isArray(concerns) && concerns.length
+      ? concerns.map((item) => String(item).slice(0, 180)).slice(0, 6)
+      : ["Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes."];
+}
+
 function applyNonFoodOverride(result) {
-  const text = [result.item, result.summary, ...result.watchouts].join(" ").toLowerCase();
+  const text = [result.item, result.summary, result.rationale, ...result.concerns].join(" ").toLowerCase();
+  if (ADULT_BEVERAGE_PATTERN.test(text) && !/\b(rubbing alcohol|cleaning alcohol|fuel alcohol|unknown alcohol|isopropyl|methanol)\b/.test(text)) {
+    return result;
+  }
   if (!NON_FOOD_PATTERN.test(text)) return result;
 
   return {
@@ -226,7 +242,8 @@ function applyNonFoodOverride(result) {
     verdict: "avoid",
     confidence: result.confidence === "high" ? "high" : "medium",
     summary: `${result.item} is not food and should not be eaten.`,
-    watchouts: [
+    rationale: "The visible item is a household object or product, not an edible food. Safe handling or normal household use does not make it safe to ingest.",
+    concerns: [
       "Household objects and products can be safe to use but still unsafe to eat.",
       "Soap, cleaners, chemicals, medicines, and container hardware are ingestion hazards.",
     ],
@@ -240,7 +257,8 @@ function fallbackResult(reason, context) {
     item: "Analysis unavailable",
     confidence: "low",
     summary: "The free model could not complete this image analysis, so treat the item as unverified.",
-    watchouts: [
+    rationale: "The image could not be evaluated reliably enough for a confident decision.",
+    concerns: [
       readableReason,
       "Try another photo with the item centered, better lighting, and less background clutter.",
       "Do not eat unknown, wild, spoiled, contaminated, or unlabeled items based on image analysis alone.",
@@ -252,7 +270,8 @@ function fallbackResult(reason, context) {
       ...result,
       item: "Non-food household item",
       summary: "The item appears to be a non-food object or product and should not be eaten.",
-      watchouts: [readableReason, "Soap, dispensers, cleaners, and household products are ingestion hazards."],
+      rationale: "The visible object or context indicates a household product rather than food.",
+      concerns: [readableReason, "Soap, dispensers, cleaners, and household products are ingestion hazards."],
     });
   }
 

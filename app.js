@@ -37,6 +37,7 @@ const els = {
   summaryText: document.querySelector("#summaryText"),
   identityText: document.querySelector("#identityText"),
   confidenceText: document.querySelector("#confidenceText"),
+  rationaleText: document.querySelector("#rationaleText"),
   watchoutsList: document.querySelector("#watchoutsList"),
   quotaRemaining: document.querySelector("#quotaRemaining"),
   quotaBar: document.querySelector("#quotaBar"),
@@ -58,8 +59,7 @@ const els = {
   contextInput: document.querySelector("#contextInput"),
 };
 
-const systemPrompt = `You are a strict visual edibility classifier for a demo app named "Can I Eat That?" The question is literal: can a human eat the depicted item as food?
-Return only valid JSON with these keys:
+const directProviderPrompt = `You are a cautious visual food safety assistant for a demo app named "Can I Eat That?" Analyze the image and return only valid JSON with these keys:
 {
   "verdict": "safe" | "caution" | "avoid",
   "item": "short identification",
@@ -67,13 +67,7 @@ Return only valid JSON with these keys:
   "summary": "one clear sentence",
   "watchouts": ["short practical risk", "short practical risk"]
 }
-Rules:
-- "Safe to touch", "safe for household use", "non-toxic surface", or "commonly used around food" does not mean edible.
-- If the item is soap, sanitizer, shampoo, lotion, medicine, pills, supplements, cleaning supplies, cosmetics, batteries, plastic, metal, glass, packaging, utensils, containers, appliances, toys, tools, unknown liquids, or any household object not intended as food, the verdict must be "avoid".
-- If the item is a dispenser, bottle, jar, wrapper, box, plate, cup, or container, judge the visible object itself unless edible contents are clearly visible.
-- If edible food is clearly visible but freshness, allergen, cooking, storage, or contamination cannot be verified, use "caution".
-- If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use "avoid" or "caution".
-- Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.`;
+Rules: If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use caution or avoid. Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.`;
 
 function init() {
   setProvider("cloudflare");
@@ -514,7 +508,7 @@ async function callClaude(apiKey) {
 
 function promptText() {
   const context = els.contextInput.value.trim();
-  return `${systemPrompt}\n\nUser context: ${context || "none provided"}`;
+  return `${directProviderPrompt}\n\nUser context: ${context || "none provided"}`;
 }
 
 async function parseApiResponse(response) {
@@ -550,36 +544,49 @@ function demoResult() {
   if (risky) {
     return {
       verdict: "avoid",
-      item: "Unverified high-risk item",
-      confidence: "medium",
-      summary: "Do not eat this without expert verification because the context suggests a high-risk item.",
-      watchouts: ["Wild or unknown items can have dangerous lookalikes.", "Images cannot confirm toxins, contamination, or freshness."],
-    };
+    item: "Unverified high-risk item",
+    confidence: "medium",
+    summary: "Do not eat this without expert verification because the context suggests a high-risk item.",
+    rationale: "The context includes high-risk language, so the safe response is to reject it without expert verification.",
+    concerns: ["Wild or unknown items can have dangerous lookalikes.", "Images cannot confirm toxins, contamination, or freshness."],
+  };
   }
   return {
     verdict: "caution",
     item: "Possible food item",
     confidence: "low",
     summary: "This looks like something that may be food, but the demo engine cannot verify safety from the image.",
-    watchouts: ["Use Free, Gemini, or Claude for real visual analysis.", "Check allergens, spoilage, storage time, and packaging before eating."],
+    rationale: "Demo mode does not perform real visual recognition, so it cannot establish whether the item is food or safe.",
+    concerns: ["Use Free, Gemini, or Claude for real visual analysis.", "Check allergens, spoilage, storage time, and packaging before eating."],
   };
 }
 
 function normalizeResult(result) {
   const source = result?.response && typeof result.response === "object" ? result.response : result;
-  const verdict = String(source.verdict || "caution").toLowerCase();
+  const verdict = String(source?.verdict || "caution").toLowerCase();
   const normalized = {
     verdict: ["safe", "caution", "avoid"].includes(verdict) ? verdict : "caution",
-    item: source.item || "Unidentified item",
-    confidence: source.confidence || "low",
-    summary: source.summary || "The model returned a limited result.",
-    watchouts: Array.isArray(source.watchouts) && source.watchouts.length ? source.watchouts : ["Do not rely on image analysis alone for medical, allergy, spoilage, or toxicology decisions."],
+    item: source?.item || "Unidentified item",
+    confidence: source?.confidence || "low",
+    summary: source?.summary || "The model returned a limited result.",
+    rationale: source?.rationale || "The model did not provide detailed reasoning.",
+    concerns: concernsFrom(source),
   };
   return applyNonFoodOverride(normalized);
 }
 
+function concernsFrom(source) {
+  if (Array.isArray(source.concerns) && source.concerns.length) return source.concerns;
+  if (Array.isArray(source.watchouts) && source.watchouts.length) return source.watchouts;
+  return ["Do not rely on image analysis alone for medical, allergy, spoilage, or toxicology decisions."];
+}
+
 function applyNonFoodOverride(result) {
-  const text = [result.item, result.summary, ...result.watchouts].join(" ").toLowerCase();
+  const text = [result.item, result.summary, result.rationale, ...result.concerns].join(" ").toLowerCase();
+  const adultBeveragePattern = /\b(whiskey|whisky|wine|beer|vodka|rum|tequila|gin|liqueur|cocktail|alcoholic beverage)\b/;
+  if (adultBeveragePattern.test(text) && !/\b(rubbing alcohol|cleaning alcohol|fuel alcohol|unknown alcohol|isopropyl|methanol)\b/.test(text)) {
+    return result;
+  }
   const nonFoodPattern = /\b(soap|soap dispenser|dispenser|sanitizer|shampoo|lotion|detergent|cleaner|cleaning|cosmetic|medicine|medication|pill|capsule|battery|plastic object|toy|tool|appliance|unknown liquid)\b/;
   if (!nonFoodPattern.test(text)) return result;
 
@@ -588,7 +595,8 @@ function applyNonFoodOverride(result) {
     verdict: "avoid",
     confidence: result.confidence === "high" ? "high" : "medium",
     summary: `${result.item} is not food and should not be eaten.`,
-    watchouts: [
+    rationale: "The visible item is a household object or product, not an edible food. Safe handling or normal household use does not make it safe to ingest.",
+    concerns: [
       "Household objects and products can be safe to use but still unsafe to eat.",
       "Soap, cleaners, chemicals, medicines, and container hardware are ingestion hazards.",
     ],
@@ -606,7 +614,8 @@ function renderResult(result) {
   els.summaryText.textContent = result.summary;
   els.identityText.textContent = result.item;
   els.confidenceText.textContent = String(result.confidence).toUpperCase();
-  renderWatchouts(result.watchouts);
+  els.rationaleText.textContent = result.rationale || "No rationale provided.";
+  renderWatchouts(result.concerns || result.watchouts || []);
 }
 
 function renderWatchouts(items) {
