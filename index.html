@@ -8,34 +8,54 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="workspace" aria-label="Can I Eat That scanner">
-        <div class="topbar">
-          <div>
-            <p class="eyebrow">AI food safety lens</p>
-            <h1>Can I Eat That?</h1>
-          </div>
-          <div class="provider-pill" id="providerPill">Demo Lens</div>
-        </div>
+      <header class="topbar">
+        <a class="brand-lockup" href="./" aria-label="Can I Eat That home">
+          <span class="logo-mark" aria-hidden="true">
+            <span class="logo-bite"></span>
+            <span class="logo-question">?</span>
+          </span>
+          <span>
+            <span class="brand-name">Can I Eat That?</span>
+            <span class="brand-tag">Suspicious snack intelligence</span>
+          </span>
+        </a>
 
+        <div class="topbar-actions">
+          <div class="provider-pill" id="providerPill">Free Cloudflare</div>
+          <button class="settings-button" id="openSettings" type="button" aria-label="Open settings" title="Settings">
+            <span aria-hidden="true">SET</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="hero-grid" aria-label="Can I Eat That scanner">
         <section class="scanner-panel">
           <div class="preview-wrap">
             <video id="cameraStream" class="camera-stream" playsinline muted></video>
             <img id="imagePreview" class="image-preview" alt="Selected item preview" />
+
             <div class="empty-preview" id="emptyPreview">
-              <span class="scan-mark"></span>
-              <strong>Point, snap, decide.</strong>
-              <small>Food, plants, leftovers, mystery containers.</small>
+              <span class="scan-mark" aria-hidden="true"></span>
+              <strong>Show me the object.</strong>
+              <small>The answer is edible, suspicious, or absolutely not.</small>
             </div>
+
+            <div class="preview-hud" aria-hidden="true">
+              <span>Lens armed</span>
+              <span>Free vision model</span>
+            </div>
+
+            <div class="camera-dock" aria-label="Camera controls">
+              <button class="dock-button" id="startCamera" type="button">Camera</button>
+              <button class="dock-button capture-button" id="capturePhoto" type="button" disabled>Snap</button>
+            </div>
+
             <div class="scan-lines" aria-hidden="true"></div>
           </div>
 
           <div class="actions">
-            <button class="icon-button" id="startCamera" type="button" aria-label="Open camera" title="Open camera">
-              <span aria-hidden="true">CAM</span>
-            </button>
-            <button class="primary-button" id="capturePhoto" type="button" disabled>Capture</button>
-            <label class="secondary-button" for="imageInput">Upload
-              <input id="imageInput" type="file" accept="image/*" capture="environment" />
+            <label class="secondary-button upload-button" for="imageInput">Upload images
+              <input id="imageInput" type="file" accept="image/*" />
             </label>
             <button class="primary-button analyze-button" id="analyzeButton" type="button" disabled>Analyze</button>
           </div>
@@ -46,36 +66,62 @@
             <p class="status-label">Verdict</p>
             <div class="verdict-row">
               <span class="verdict-dot pending" id="verdictDot"></span>
-              <h2 id="verdictTitle">Waiting for an image</h2>
+              <h1 id="verdictTitle">Waiting for evidence</h1>
             </div>
-            <p class="result-copy" id="summaryText">Take or upload a picture to get an edible, caution, or avoid recommendation.</p>
+            <p class="result-copy" id="summaryText">Take a camera shot or upload an image. If it is soap, plastic, medicine, mystery goo, or not meant as food, the answer should be no.</p>
           </div>
 
           <div class="detail-grid">
             <article class="detail-card">
-              <h3>Identification</h3>
+              <h2>Identification</h2>
               <p id="identityText">No item scanned yet.</p>
             </article>
             <article class="detail-card">
-              <h3>Confidence</h3>
+              <h2>Confidence</h2>
               <p id="confidenceText">--</p>
             </article>
             <article class="detail-card wide">
-              <h3>Watchouts</h3>
+              <h2>Watchouts</h2>
               <ul id="watchoutsList">
-                <li>AI cannot verify allergens, spoilage, contamination, dosage, or poisonous lookalikes from an image alone.</li>
+                <li>Household objects, chemicals, medicine, containers, packaging, and non-food items are not edible even when they are safe to touch or use.</li>
               </ul>
             </article>
           </div>
+
+          <section class="quota-card" aria-label="Free model usage estimate">
+            <div>
+              <p class="quota-label">Free meter - this browser</p>
+              <strong id="quotaRemaining">Estimating allowance</strong>
+            </div>
+            <div class="quota-bar" aria-hidden="true">
+              <span id="quotaBar"></span>
+            </div>
+            <div class="quota-stats">
+              <span id="quotaRequests">0 requests today</span>
+              <span id="quotaNeurons">0 / 10,000 neurons</span>
+              <span id="quotaReset">Resets daily</span>
+            </div>
+          </section>
         </section>
       </section>
+    </main>
 
-      <aside class="control-rail" aria-label="AI settings">
+    <aside class="settings-panel" id="settingsPanel" aria-label="Settings" aria-hidden="true">
+      <div class="settings-scrim" id="settingsScrim"></div>
+      <div class="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="settings-header">
+          <div>
+            <p class="eyebrow">Model room</p>
+            <h2 id="settingsTitle">Settings</h2>
+          </div>
+          <button class="settings-close" id="closeSettings" type="button" aria-label="Close settings">Close</button>
+        </div>
+
         <div class="rail-section">
-          <h2>Engine</h2>
+          <h3>Engine</h3>
           <div class="segmented" role="group" aria-label="Provider">
-            <button class="segment active" type="button" data-provider="demo">Demo</button>
-            <button class="segment" type="button" data-provider="cloudflare">Free</button>
+            <button class="segment active" type="button" data-provider="cloudflare">Free</button>
+            <button class="segment" type="button" data-provider="demo">Demo</button>
             <button class="segment" type="button" data-provider="gemini">Gemini</button>
             <button class="segment" type="button" data-provider="claude">Claude</button>
           </div>
@@ -110,12 +156,11 @@
         </div>
 
         <div class="rail-section mini">
-          <h2>Deploy notes</h2>
-          <p>Free mode uses Cloudflare Workers AI and keeps model access on the server side.</p>
-          <p>Gemini and Claude modes are still available for direct key-based demos.</p>
+          <h3>Safety stance</h3>
+          <p>The Free model is instructed to reject non-food objects, soap, cleaners, medicine, packaging, and ambiguous items as not edible.</p>
         </div>
-      </aside>
-    </main>
+      </div>
+    </aside>
 
     <canvas id="captureCanvas" hidden></canvas>
     <script type="module" src="./app.js"></script>

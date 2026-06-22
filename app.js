@@ -1,5 +1,5 @@
 const state = {
-  provider: "demo",
+  provider: "cloudflare",
   image: null,
   stream: null,
 };
@@ -19,6 +19,8 @@ const labels = {
 };
 
 const defaultWorkerEndpoint = "https://can-i-eat-that-ai.kevinrhaas.workers.dev/analyze";
+const freeDailyNeurons = 10_000;
+const defaultNeuronsPerCheck = 20;
 
 const els = {
   providerPill: document.querySelector("#providerPill"),
@@ -37,6 +39,15 @@ const els = {
   identityText: document.querySelector("#identityText"),
   confidenceText: document.querySelector("#confidenceText"),
   watchoutsList: document.querySelector("#watchoutsList"),
+  quotaRemaining: document.querySelector("#quotaRemaining"),
+  quotaBar: document.querySelector("#quotaBar"),
+  quotaRequests: document.querySelector("#quotaRequests"),
+  quotaNeurons: document.querySelector("#quotaNeurons"),
+  quotaReset: document.querySelector("#quotaReset"),
+  openSettings: document.querySelector("#openSettings"),
+  closeSettings: document.querySelector("#closeSettings"),
+  settingsPanel: document.querySelector("#settingsPanel"),
+  settingsScrim: document.querySelector("#settingsScrim"),
   segments: Array.from(document.querySelectorAll(".segment")),
   endpointSection: document.querySelector("#endpointSection"),
   endpointInput: document.querySelector("#endpointInput"),
@@ -48,7 +59,8 @@ const els = {
   contextInput: document.querySelector("#contextInput"),
 };
 
-const systemPrompt = `You are a cautious visual food safety assistant for a demo app named "Can I Eat That?" Analyze the image and return only valid JSON with these keys:
+const systemPrompt = `You are a strict visual edibility classifier for a demo app named "Can I Eat That?" The question is literal: can a human eat the depicted item as food?
+Return only valid JSON with these keys:
 {
   "verdict": "safe" | "caution" | "avoid",
   "item": "short identification",
@@ -56,12 +68,19 @@ const systemPrompt = `You are a cautious visual food safety assistant for a demo
   "summary": "one clear sentence",
   "watchouts": ["short practical risk", "short practical risk"]
 }
-Rules: If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use caution or avoid. Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.`;
+Rules:
+- "Safe to touch", "safe for household use", "non-toxic surface", or "commonly used around food" does not mean edible.
+- If the item is soap, sanitizer, shampoo, lotion, medicine, pills, supplements, cleaning supplies, cosmetics, batteries, plastic, metal, glass, packaging, utensils, containers, appliances, toys, tools, unknown liquids, or any household object not intended as food, the verdict must be "avoid".
+- If the item is a dispenser, bottle, jar, wrapper, box, plate, cup, or container, judge the visible object itself unless edible contents are clearly visible.
+- If edible food is clearly visible but freshness, allergen, cooking, storage, or contamination cannot be verified, use "caution".
+- If the image shows wild mushrooms, unidentified plants, spoiled food, chemicals, medicine, animal waste, raw unsafe items, or anything ambiguous, use "avoid" or "caution".
+- Do not claim certainty from appearance alone. Mention allergen, spoilage, contamination, dosage, and poisonous lookalike limits when relevant.`;
 
 function init() {
-  setProvider("demo");
+  setProvider("cloudflare");
   bindEvents();
   renderStoredKey();
+  renderQuotaMeter();
 }
 
 function bindEvents() {
@@ -73,10 +92,27 @@ function bindEvents() {
   els.capturePhoto.addEventListener("click", capturePhoto);
   els.imageInput.addEventListener("change", handleFileInput);
   els.analyzeButton.addEventListener("click", analyzeImage);
+  els.openSettings.addEventListener("click", openSettings);
+  els.closeSettings.addEventListener("click", closeSettings);
+  els.settingsScrim.addEventListener("click", closeSettings);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSettings();
+  });
   els.rememberKey.addEventListener("change", persistKeyPreference);
   els.apiKey.addEventListener("input", persistKeyIfAllowed);
   els.rememberEndpoint.addEventListener("change", persistEndpointPreference);
   els.endpointInput.addEventListener("input", persistEndpointIfAllowed);
+}
+
+function openSettings() {
+  els.settingsPanel.classList.add("open");
+  els.settingsPanel.setAttribute("aria-hidden", "false");
+  els.closeSettings.focus();
+}
+
+function closeSettings() {
+  els.settingsPanel.classList.remove("open");
+  els.settingsPanel.setAttribute("aria-hidden", "true");
 }
 
 function setProvider(provider) {
@@ -303,6 +339,7 @@ async function callCloudflare() {
   }
 
   const payload = await parseApiResponse(response);
+  trackFreeUsage(payload.usage);
   return payload.result || payload;
 }
 
@@ -329,6 +366,81 @@ function cloudflareFallback(message) {
 
 function workerEndpoint() {
   return els.endpointInput.value.trim();
+}
+
+function trackFreeUsage(usage) {
+  const current = readFreeUsage();
+  const estimatedNeurons = Math.max(0, Number(usage?.estimatedNeurons || 0));
+  const promptTokens = Math.max(0, Number(usage?.promptTokens || 0));
+  const completionTokens = Math.max(0, Number(usage?.completionTokens || 0));
+
+  current.requests += 1;
+  current.neurons += estimatedNeurons;
+  current.promptTokens += promptTokens;
+  current.completionTokens += completionTokens;
+  current.lastNeurons = estimatedNeurons || current.lastNeurons || defaultNeuronsPerCheck;
+  localStorage.setItem(freeUsageStorageKey(), JSON.stringify(current));
+  renderQuotaMeter();
+}
+
+function readFreeUsage() {
+  const today = utcDayKey();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(freeUsageStorageKey()) || "{}");
+    if (parsed.date === today) {
+      return {
+        date: today,
+        requests: Number(parsed.requests || 0),
+        neurons: Number(parsed.neurons || 0),
+        promptTokens: Number(parsed.promptTokens || 0),
+        completionTokens: Number(parsed.completionTokens || 0),
+        lastNeurons: Number(parsed.lastNeurons || defaultNeuronsPerCheck),
+      };
+    }
+  } catch {
+    // Ignore corrupt local meter data.
+  }
+  return {
+    date: today,
+    requests: 0,
+    neurons: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    lastNeurons: defaultNeuronsPerCheck,
+  };
+}
+
+function renderQuotaMeter() {
+  const usage = readFreeUsage();
+  const used = Math.max(0, Math.round(usage.neurons));
+  const remaining = Math.max(0, freeDailyNeurons - used);
+  const average = usage.requests > 0 ? Math.max(1, usage.neurons / usage.requests) : usage.lastNeurons;
+  const checksLeft = Math.floor(remaining / Math.max(1, average));
+  const percentUsed = Math.min(100, Math.round((used / freeDailyNeurons) * 100));
+
+  els.quotaRemaining.textContent = `${checksLeft.toLocaleString()} estimated Free checks left`;
+  els.quotaBar.style.width = `${percentUsed}%`;
+  els.quotaRequests.textContent = `${usage.requests.toLocaleString()} request${usage.requests === 1 ? "" : "s"} today`;
+  els.quotaNeurons.textContent = `${used.toLocaleString()} / ${freeDailyNeurons.toLocaleString()} neurons`;
+  els.quotaReset.textContent = `Resets ${nextUtcResetLabel()}`;
+}
+
+function freeUsageStorageKey() {
+  return "can-i-eat-that:cloudflare:usage";
+}
+
+function utcDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function nextUtcResetLabel() {
+  const now = new Date();
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const diffMs = next.getTime() - now.getTime();
+  const hours = Math.max(0, Math.floor(diffMs / 3_600_000));
+  const minutes = Math.max(0, Math.floor((diffMs % 3_600_000) / 60_000));
+  if (hours <= 0) return `in ${minutes}m`;
+  return `in ${hours}h ${minutes}m`;
 }
 
 async function callGemini(apiKey) {
@@ -456,13 +568,32 @@ function demoResult() {
 }
 
 function normalizeResult(result) {
-  const verdict = String(result.verdict || "caution").toLowerCase();
-  return {
+  const source = result?.response && typeof result.response === "object" ? result.response : result;
+  const verdict = String(source.verdict || "caution").toLowerCase();
+  const normalized = {
     verdict: ["safe", "caution", "avoid"].includes(verdict) ? verdict : "caution",
-    item: result.item || "Unidentified item",
-    confidence: result.confidence || "low",
-    summary: result.summary || "The model returned a limited result.",
-    watchouts: Array.isArray(result.watchouts) && result.watchouts.length ? result.watchouts : ["Do not rely on image analysis alone for medical, allergy, spoilage, or toxicology decisions."],
+    item: source.item || "Unidentified item",
+    confidence: source.confidence || "low",
+    summary: source.summary || "The model returned a limited result.",
+    watchouts: Array.isArray(source.watchouts) && source.watchouts.length ? source.watchouts : ["Do not rely on image analysis alone for medical, allergy, spoilage, or toxicology decisions."],
+  };
+  return applyNonFoodOverride(normalized);
+}
+
+function applyNonFoodOverride(result) {
+  const text = [result.item, result.summary, ...result.watchouts].join(" ").toLowerCase();
+  const nonFoodPattern = /\b(soap|soap dispenser|dispenser|sanitizer|shampoo|lotion|detergent|cleaner|cleaning|cosmetic|medicine|medication|pill|capsule|battery|plastic object|toy|tool|appliance|unknown liquid)\b/;
+  if (!nonFoodPattern.test(text)) return result;
+
+  return {
+    ...result,
+    verdict: "avoid",
+    confidence: result.confidence === "high" ? "high" : "medium",
+    summary: `${result.item} is not food and should not be eaten.`,
+    watchouts: [
+      "Household objects and products can be safe to use but still unsafe to eat.",
+      "Soap, cleaners, chemicals, medicines, and container hardware are ingestion hazards.",
+    ],
   };
 }
 
