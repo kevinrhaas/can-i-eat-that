@@ -75,9 +75,19 @@
           <h2>Engine</h2>
           <div class="segmented" role="group" aria-label="Provider">
             <button class="segment active" type="button" data-provider="demo">Demo</button>
+            <button class="segment" type="button" data-provider="cloudflare">Free</button>
             <button class="segment" type="button" data-provider="gemini">Gemini</button>
             <button class="segment" type="button" data-provider="claude">Claude</button>
           </div>
+        </div>
+
+        <div class="rail-section endpoint-section" id="endpointSection">
+          <label for="endpointInput">Worker endpoint</label>
+          <input id="endpointInput" type="url" autocomplete="off" placeholder="https://...workers.dev/analyze" />
+          <label class="check-row">
+            <input id="rememberEndpoint" type="checkbox" />
+            <span>Remember endpoint</span>
+          </label>
         </div>
 
         <div class="rail-section key-section" id="keySection">
@@ -101,8 +111,8 @@
 
         <div class="rail-section mini">
           <h2>Deploy notes</h2>
-          <p>Static demo: GitHub Pages, Netlify, Vercel, or any HTTPS host.</p>
-          <p>Production: move API keys into a serverless proxy before public use.</p>
+          <p>Free mode uses Cloudflare Workers AI and keeps model access on the server side.</p>
+          <p>Gemini and Claude modes are still available for direct key-based demos.</p>
         </div>
       </aside>
     </main>

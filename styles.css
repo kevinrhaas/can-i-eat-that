@@ -387,7 +387,7 @@ h1 {
 
 .segmented {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -524,6 +524,10 @@ button:focus-visible,
 
   .actions {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .segmented {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .analyze-button {

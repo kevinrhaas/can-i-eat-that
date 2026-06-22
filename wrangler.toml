@@ -1,0 +1,7 @@
+name = "can-i-eat-that-ai"
+main = "worker/src/index.js"
+compatibility_date = "2026-06-21"
+account_id = "b60f1482228cf6d550530362a566864f"
+
+[ai]
+binding = "AI"

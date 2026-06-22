@@ -6,15 +6,19 @@ const state = {
 
 const defaults = {
   demo: "demo-lens",
+  cloudflare: "@cf/meta/llama-3.2-11b-vision-instruct",
   gemini: "gemini-3.5-flash",
   claude: "claude-sonnet-4-6",
 };
 
 const labels = {
   demo: "Demo Lens",
+  cloudflare: "Free Cloudflare",
   gemini: "Gemini",
   claude: "Claude",
 };
+
+const defaultWorkerEndpoint = "https://can-i-eat-that-ai.kevinrhaas.workers.dev/analyze";
 
 const els = {
   providerPill: document.querySelector("#providerPill"),
@@ -34,6 +38,9 @@ const els = {
   confidenceText: document.querySelector("#confidenceText"),
   watchoutsList: document.querySelector("#watchoutsList"),
   segments: Array.from(document.querySelectorAll(".segment")),
+  endpointSection: document.querySelector("#endpointSection"),
+  endpointInput: document.querySelector("#endpointInput"),
+  rememberEndpoint: document.querySelector("#rememberEndpoint"),
   keySection: document.querySelector("#keySection"),
   apiKey: document.querySelector("#apiKey"),
   rememberKey: document.querySelector("#rememberKey"),
@@ -68,17 +75,21 @@ function bindEvents() {
   els.analyzeButton.addEventListener("click", analyzeImage);
   els.rememberKey.addEventListener("change", persistKeyPreference);
   els.apiKey.addEventListener("input", persistKeyIfAllowed);
+  els.rememberEndpoint.addEventListener("change", persistEndpointPreference);
+  els.endpointInput.addEventListener("input", persistEndpointIfAllowed);
 }
 
 function setProvider(provider) {
   state.provider = provider;
   els.providerPill.textContent = labels[provider];
   els.modelInput.value = defaults[provider];
-  els.keySection.style.display = provider === "demo" ? "none" : "grid";
+  els.keySection.style.display = provider === "gemini" || provider === "claude" ? "grid" : "none";
+  els.endpointSection.style.display = provider === "cloudflare" ? "grid" : "none";
   els.segments.forEach((button) => {
     button.classList.toggle("active", button.dataset.provider === provider);
   });
   renderStoredKey();
+  renderStoredEndpoint();
 }
 
 function renderStoredKey() {
@@ -97,13 +108,37 @@ function persistKeyPreference() {
 }
 
 function persistKeyIfAllowed() {
-  if (els.rememberKey.checked && state.provider !== "demo") {
+  if (els.rememberKey.checked && (state.provider === "gemini" || state.provider === "claude")) {
     localStorage.setItem(storageKey(), els.apiKey.value.trim());
   }
 }
 
 function storageKey() {
   return `can-i-eat-that:${state.provider}:api-key`;
+}
+
+function renderStoredEndpoint() {
+  const stored = localStorage.getItem(endpointStorageKey());
+  els.rememberEndpoint.checked = Boolean(stored);
+  els.endpointInput.value = stored || defaultWorkerEndpoint;
+}
+
+function persistEndpointPreference() {
+  if (!els.rememberEndpoint.checked) {
+    localStorage.removeItem(endpointStorageKey());
+    return;
+  }
+  persistEndpointIfAllowed();
+}
+
+function persistEndpointIfAllowed() {
+  if (els.rememberEndpoint.checked) {
+    localStorage.setItem(endpointStorageKey(), els.endpointInput.value.trim());
+  }
+}
+
+function endpointStorageKey() {
+  return "can-i-eat-that:cloudflare:endpoint";
 }
 
 async function startCamera() {
@@ -149,16 +184,46 @@ function handleFileInput(event) {
   reader.readAsDataURL(file);
 }
 
-function setImage(dataUrl, mimeType) {
+async function setImage(dataUrl, mimeType) {
+  const prepared = await prepareImage(dataUrl, mimeType);
   state.image = {
-    dataUrl,
-    mimeType,
-    base64: dataUrl.split(",")[1],
+    dataUrl: prepared.dataUrl,
+    mimeType: prepared.mimeType,
+    base64: prepared.dataUrl.split(",")[1],
   };
-  els.imagePreview.src = dataUrl;
+  els.imagePreview.src = prepared.dataUrl;
   showPreview();
   els.analyzeButton.disabled = false;
   setPending("Ready to analyze", "Send the image to the selected engine for a food-safety verdict.");
+}
+
+async function prepareImage(dataUrl, mimeType) {
+  const image = await loadImage(dataUrl);
+  const maxSide = 1024;
+  const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+
+  const canvas = els.captureCanvas;
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  context.drawImage(image, 0, 0, width, height);
+
+  const outputType = mimeType === "image/png" && scale === 1 ? "image/png" : "image/jpeg";
+  return {
+    dataUrl: canvas.toDataURL(outputType, 0.82),
+    mimeType: outputType,
+  };
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("The image could not be prepared for analysis."));
+    image.src = dataUrl;
+  });
 }
 
 function showCamera() {
@@ -185,8 +250,12 @@ function stopCamera() {
 async function analyzeImage() {
   if (!state.image) return;
   const apiKey = els.apiKey.value.trim();
-  if (state.provider !== "demo" && !apiKey) {
+  if ((state.provider === "gemini" || state.provider === "claude") && !apiKey) {
     setError("API key needed", `Paste a ${labels[state.provider]} key or switch to Demo.`);
+    return;
+  }
+  if (state.provider === "cloudflare" && !workerEndpoint()) {
+    setError("Worker endpoint needed", "Deploy the Cloudflare Worker or paste its /analyze endpoint.");
     return;
   }
 
@@ -207,9 +276,34 @@ async function analyzeImage() {
 
 async function runProvider(apiKey) {
   if (state.provider === "demo") return demoResult();
+  if (state.provider === "cloudflare") return callCloudflare();
   if (state.provider === "gemini") return callGemini(apiKey);
   if (state.provider === "claude") return callClaude(apiKey);
   throw new Error("Unknown provider.");
+}
+
+async function callCloudflare() {
+  const response = await fetch(workerEndpoint(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      image: {
+        mimeType: state.image.mimeType,
+        base64: state.image.base64,
+      },
+      context: els.contextInput.value.trim(),
+      model: els.modelInput.value.trim() || defaults.cloudflare,
+    }),
+  });
+
+  const payload = await parseApiResponse(response);
+  return payload.result || payload;
+}
+
+function workerEndpoint() {
+  return els.endpointInput.value.trim();
 }
 
 async function callGemini(apiKey) {
@@ -332,7 +426,7 @@ function demoResult() {
     item: "Possible food item",
     confidence: "low",
     summary: "This looks like something that may be food, but the demo engine cannot verify safety from the image.",
-    watchouts: ["Use Gemini or Claude for real visual analysis.", "Check allergens, spoilage, storage time, and packaging before eating."],
+    watchouts: ["Use Free, Gemini, or Claude for real visual analysis.", "Check allergens, spoilage, storage time, and packaging before eating."],
   };
 }
 

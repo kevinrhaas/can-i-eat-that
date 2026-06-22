@@ -5,6 +5,9 @@
   "description": "Camera-first edible item classifier demo using Gemini or Claude vision APIs.",
   "scripts": {
     "dev": "python3 -m http.server 5173",
-    "start": "python3 -m http.server 5173"
+    "start": "python3 -m http.server 5173",
+    "dev:worker": "npx wrangler dev",
+    "deploy:worker": "npx wrangler deploy",
+    "cf:agree": "curl -X POST https://can-i-eat-that-ai.kevinrhaas.workers.dev/agree"
   }
 }
