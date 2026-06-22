@@ -298,8 +298,33 @@ async function callCloudflare() {
     }),
   });
 
+  if (!response.ok) {
+    return cloudflareFallback(await response.text());
+  }
+
   const payload = await parseApiResponse(response);
   return payload.result || payload;
+}
+
+function cloudflareFallback(message) {
+  let parsed;
+  try {
+    parsed = message ? JSON.parse(message) : {};
+  } catch {
+    parsed = { error: message };
+  }
+
+  const reason = parsed.error || parsed.message || `${message || "The free model request failed."}`;
+  return {
+    verdict: "caution",
+    item: "Analysis unavailable",
+    confidence: "low",
+    summary: "The free model could not complete this image analysis, so treat the item as unverified.",
+    watchouts: [
+      String(reason).slice(0, 180),
+      "Try a clearer, closer photo or switch to Gemini/Claude with your own key.",
+    ],
+  };
 }
 
 function workerEndpoint() {

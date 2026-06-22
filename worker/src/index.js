@@ -54,7 +54,7 @@ export default {
       const result = parseModelResult(text);
       return json({ result, raw: text }, 200, request);
     } catch (error) {
-      return json({ error: readableError(error) }, 400, request);
+      return json({ result: fallbackResult(readableError(error)), recovered: true }, 200, request);
     }
   },
 };
@@ -197,6 +197,21 @@ function normalizeResult(result) {
     watchouts: Array.isArray(result?.watchouts) && result.watchouts.length
       ? result.watchouts.map((item) => String(item).slice(0, 180)).slice(0, 5)
       : ["Do not rely on image analysis alone for allergens, spoilage, toxins, or poisonous lookalikes."],
+  };
+}
+
+function fallbackResult(reason) {
+  const readableReason = String(reason || "The free analysis service could not complete the request.").slice(0, 220);
+  return {
+    verdict: "caution",
+    item: "Analysis unavailable",
+    confidence: "low",
+    summary: "The free model could not complete this image analysis, so treat the item as unverified.",
+    watchouts: [
+      readableReason,
+      "Try another photo with the item centered, better lighting, and less background clutter.",
+      "Do not eat unknown, wild, spoiled, contaminated, or unlabeled items based on image analysis alone.",
+    ],
   };
 }
 
